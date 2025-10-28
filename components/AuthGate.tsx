@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface AuthGateProps {
     children: React.ReactNode;
 }
 
 const ALLOWED_DOMAINS = ['allwavegs.com', 'allwaveav.com'];
+const AUTH_KEY = 'genboq_authenticated_user';
 
 const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,29 +13,27 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    // API Key Check - This is a developer-facing check.
-    if (!process.env.API_KEY) {
-        return (
-            <div className="flex items-center justify-center h-screen text-white">
-                <div className="text-center p-8 bg-slate-800 rounded-lg shadow-xl">
-                    <h1 className="text-2xl font-bold text-red-500 mb-4">Configuration Error</h1>
-                    <p className="text-slate-300">
-                        The Gemini API key is not configured.
-                    </p>
-                    <p className="text-slate-400 mt-2 text-sm">
-                        Please set the <code className="bg-slate-700 px-1 py-0.5 rounded">API_KEY</code> environment variable.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    useEffect(() => {
+        // Check session storage to see if user is already authenticated
+        const authenticatedUser = sessionStorage.getItem(AUTH_KEY);
+        if (authenticatedUser) {
+            try {
+                const domain = authenticatedUser.split('@')[1];
+                if (ALLOWED_DOMAINS.includes(domain)) {
+                    setIsAuthenticated(true);
+                }
+            } catch (e) {
+                sessionStorage.removeItem(AUTH_KEY);
+            }
+        }
+    }, []);
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         setError(null);
 
-        // Simulate a quick validation check
         setTimeout(() => {
             try {
                 if (!email.includes('@')) {
@@ -42,6 +41,7 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
                 }
                 const domain = email.split('@')[1];
                 if (ALLOWED_DOMAINS.includes(domain)) {
+                    sessionStorage.setItem(AUTH_KEY, email);
                     setIsAuthenticated(true); // Grant access
                 } else {
                     throw new Error('Access denied. Please use a valid company email.');
@@ -54,12 +54,10 @@ const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
         }, 500);
     };
 
-    // If authenticated, render the main application
     if (isAuthenticated) {
         return <>{children}</>;
     }
 
-    // If not authenticated, show the email login form
     return (
         <div className="flex items-center justify-center min-h-screen text-slate-200">
             <div className="w-full max-w-md p-8 space-y-8 bg-slate-800 rounded-lg shadow-2xl border border-slate-700">

@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Room, BoqItem, ClientDetails, Currency } from '../types';
 import { exportToXlsx } from '../utils/exportToXlsx';
 import DownloadIcon from './icons/DownloadIcon';
@@ -32,10 +31,10 @@ const BoqDisplay: React.FC<BoqDisplayProps> = ({ rooms, clientDetails, onBoqUpda
     setIsRefineModalOpen(false); // Close modal after submission
   }
 
-  const grandTotal = rooms.reduce((total, room) => {
+  const grandTotal = useMemo(() => rooms.reduce((total, room) => {
     const roomTotal = room.boq.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
     return total + roomTotal;
-  }, 0) * exchangeRate;
+  }, 0) * exchangeRate, [rooms, exchangeRate]);
 
   const currencyFormatter = new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -43,6 +42,14 @@ const BoqDisplay: React.FC<BoqDisplayProps> = ({ rooms, clientDetails, onBoqUpda
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+  if (isLoading && rooms.length === 0) {
+      return (
+          <div className="text-center p-8 text-slate-400">
+              <p>Generating initial BOQ... this may take a moment.</p>
+          </div>
+      )
+  }
 
   return (
     <div className="space-y-8">
@@ -59,12 +66,14 @@ const BoqDisplay: React.FC<BoqDisplayProps> = ({ rooms, clientDetails, onBoqUpda
           <button
             onClick={() => setIsRefineModalOpen(true)}
             className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 disabled:bg-slate-500"
+            aria-label="Refine BOQ with AI"
           >
             <WandIcon /> Refine with AI
           </button>
           <button
             onClick={() => exportToXlsx(rooms, clientDetails, currency, exchangeRate)}
             className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-green-500"
+            aria-label="Export to Excel"
           >
             <DownloadIcon /> Export to XLSX
           </button>
@@ -85,8 +94,8 @@ const BoqDisplay: React.FC<BoqDisplayProps> = ({ rooms, clientDetails, onBoqUpda
 
       <RefineModal
         isOpen={isRefineModalOpen}
-        onClose={() => setIsRefineModalOpen(false)}
         onSubmit={handleRefineSubmit}
+        onClose={() => setIsRefineModalOpen(false)}
         isLoading={isLoading}
       />
     </div>

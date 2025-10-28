@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Room, BoqItem, Currency } from '../types';
 
@@ -89,7 +88,11 @@ const RoomCard: React.FC<RoomCardProps> = ({ room, onBoqChange, currency, exchan
                       <td className="px-4 py-2 text-right">{currencyFormatter.format(unitPriceConverted)}</td>
                       <td className="px-4 py-2 text-right font-semibold">{currencyFormatter.format(totalPrice)}</td>
                       <td className="px-4 py-2 text-center">
-                        <button onClick={() => handleDeleteItem(index)} className="text-red-500 hover:text-red-400 font-medium">
+                        <button 
+                          onClick={() => handleDeleteItem(index)} 
+                          className="text-red-500 hover:text-red-400 font-medium"
+                          aria-label={`Delete ${item.itemName}`}
+                        >
                           Delete
                         </button>
                       </td>
