@@ -1,4 +1,3 @@
-
 import type { QuestionnaireSection } from '../types';
 
 export const questionnaire: QuestionnaireSection[] = [
@@ -15,6 +14,10 @@ export const questionnaire: QuestionnaireSection[] = [
           { label: 'Boardroom', value: 'boardroom' },
           { label: 'Classroom / Training Room', value: 'classroom' },
           { label: 'Auditorium', value: 'auditorium' },
+          { label: 'Town Hall / All-Hands Space', value: 'town_hall' },
+          { label: 'Experience Center', value: 'experience_center' },
+          { label: 'NOC / Command Center', value: 'noc' },
+          { label: 'Executive Office', value: 'executive_office' },
           { label: 'Lobby / Digital Signage', value: 'lobby' },
         ],
       },

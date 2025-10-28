@@ -1,98 +1,149 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import type { BoqItem } from '../types';
+import { GoogleGenAI, Type } from '@google/genai';
+import type { BoqItem, ClientDetails, Room } from '../types';
 
-// This check is for the developer to ensure they have set up their environment correctly.
 if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
+  throw new Error("API_KEY environment variable not set");
 }
-// Fix: Initialize the GoogleGenAI client with the API key from environment variables.
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Fix: Use a recommended model for complex JSON generation
+const model = 'gemini-2.5-pro';
 
 const boqItemSchema = {
   type: Type.OBJECT,
   properties: {
-    category: { type: Type.STRING, description: "The category of the item (e.g., Display, Audio, Control)." },
-    itemName: { type: Type.STRING, description: "The generic name of the item (e.g., 4K Professional Display)." },
-    brand: { type: Type.STRING, description: "The manufacturer or brand of the item (e.g., Samsung, Crestron)." },
-    modelNumber: { type: Type.STRING, description: "The specific model number of the item (e.g., LH75QMBEBGCX/ZA)." },
-    description: { type: Type.STRING, description: "A detailed description of the item and its purpose in the system." },
-    quantity: { type: Type.INTEGER, description: "The number of units required." },
-    unitPrice: { type: Type.NUMBER, description: "The estimated price per unit in USD. Do not include currency symbols." },
-    imageUrl: { type: Type.STRING, description: "A URL to a representative image of the product. Can be an empty string if not found." },
-    notes: { type: Type.STRING, description: "Any additional notes or considerations for this item. Can be an empty string." },
+    category: { type: Type.STRING, description: 'e.g., Display, Audio, Control, Cable' },
+    itemName: { type: Type.STRING, description: 'Specific name of the item.' },
+    brand: { type: Type.STRING, description: 'Manufacturer of the item.' },
+    modelNumber: { type: Type.STRING, description: 'Model number of the item.' },
+    description: { type: Type.STRING, description: 'Brief technical description of the item.' },
+    quantity: { type: Type.INTEGER, description: 'Number of units required.' },
+    unitPrice: { type: Type.NUMBER, description: 'Estimated price per unit in USD.' },
+    imageUrl: { type: Type.STRING, description: 'A placeholder URL for an image of the product. Should be an empty string.' },
+    notes: { type: Type.STRING, description: 'Any specific notes about this item for the installation.' },
   },
-  required: ["category", "itemName", "brand", "modelNumber", "description", "quantity", "unitPrice"],
+  required: ['category', 'itemName', 'brand', 'modelNumber', 'description', 'quantity', 'unitPrice'],
 };
 
-const boqSchema = {
-  type: Type.ARRAY,
-  items: boqItemSchema,
+const roomSchema = {
+  type: Type.OBJECT,
+  properties: {
+    name: { type: Type.STRING, description: 'A descriptive name for the room, e.g., "Main Boardroom" or "Huddle Space 1".' },
+    requirements: { type: Type.STRING, description: 'A summary of the user requirements for this room.' },
+    boq: {
+      type: Type.ARRAY,
+      items: boqItemSchema,
+    },
+  },
+  required: ['name', 'requirements', 'boq'],
 };
 
-const systemInstruction = `You are an expert Audio/Visual (AV) system designer. Your task is to generate a detailed Bill of Quantities (BOQ) based on the user's room requirements.
-- The output MUST be a valid JSON array of objects, strictly adhering to the provided schema.
-- For each item, provide a well-known brand and a realistic model number.
-- Ensure quantities are appropriate for the specified room size and purpose.
-- Unit prices should be realistic, in USD, and represented as a number (e.g., 1500.00).
-- The description should explain why the item is chosen for this setup.
-- If a budget is provided, try to select components that fit within the budget, prioritizing core functionality.
-- Do not include any introductory text, closing remarks, or any content outside of the JSON array itself. The response must start with '[' and end with ']'.`;
+const responseSchema = {
+  type: Type.OBJECT,
+  properties: {
+    rooms: {
+      type: Type.ARRAY,
+      description: 'An array of room objects, each containing a Bill of Quantities.',
+      items: roomSchema,
+    },
+  },
+  required: ['rooms'],
+};
 
-export const generateBoq = async (requirements: string): Promise<BoqItem[]> => {
+const systemInstruction = `You are an expert Audio-Visual (AV) system designer and estimator. Your task is to generate a detailed Bill of Quantities (BOQ) based on user-provided room requirements.
+
+Guidelines:
+1.  **Analyze Requirements:** Carefully read the user's request to understand the room's purpose, size, capacity, and desired functionality (e.g., video conferencing, wireless presentation, control system type).
+2.  **Select Appropriate Equipment:** Choose realistic, commercially available AV equipment from well-known brands (e.g., Crestron, Extron, Shure, Biamp, Samsung, LG, Barco, Poly, Cisco). Specify exact model numbers where possible.
+3.  **Structure the BOQ:**
+    *   Organize items into logical categories: Display, Audio, Video Conferencing, Control, Cabling & Infrastructure, Accessories.
+    *   For each item, provide all the required fields: category, brand, model number, item name, description, quantity, and an estimated unit price in USD.
+    *   Include all necessary auxiliary items: mounts, cables (HDMI, USB, CAT6), faceplates, power strips, and racks. Assume standard cable lengths unless specified.
+4.  **Pricing:** Provide realistic, estimated retail prices in USD. These are for budget purposes only.
+5.  **JSON Output:** Format the entire output as a single JSON object that strictly adheres to the provided schema. Do not include any text, explanations, or markdown formatting outside of the JSON structure.
+6.  **Multiple Rooms:** If the user describes multiple rooms, create a separate room object with its own BOQ for each one in the 'rooms' array. If only one room is described, the 'rooms' array should contain a single object.
+7.  **Budget Constraint:** If a budget is provided, try to select equipment that fits within the budget while still meeting the core requirements. Add a note if the requirements cannot be met within the budget.
+`;
+
+
+export const generateBoqFromRequirements = async (requirements: string, clientDetails: ClientDetails): Promise<Room[]> => {
+  let userPrompt = `Client Requirements:\n${requirements}`;
+  if (clientDetails.budget) {
+      userPrompt += `\n\nThe client has an approximate budget of $${clientDetails.budget} for this room/project. Please select equipment that aligns with this budget.`
+  }
+
   try {
-    // Fix: Call the Gemini API to generate content with the specified model, contents, and configuration.
     const response = await ai.models.generateContent({
-        model: "gemini-2.5-pro", // Using a more capable model for complex structured output
-        contents: requirements,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: boqSchema,
-            temperature: 0.2, // Lower temperature for more predictable, structured output
-            systemInstruction
-        },
+      model: model,
+      contents: userPrompt,
+      config: {
+        systemInstruction: systemInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: responseSchema,
+        temperature: 0.2,
+      },
     });
 
-    // Fix: Extract and parse the JSON response from the API.
+    // Fix: Correctly extract text from response
     const jsonText = response.text.trim();
-    const boq = JSON.parse(jsonText) as BoqItem[];
-    // Basic validation
-    if (!Array.isArray(boq)) {
-      throw new Error("AI response is not a valid array.");
+    console.log("Gemini Raw Response:", jsonText);
+    const parsedJson = JSON.parse(jsonText);
+    
+    if (parsedJson && parsedJson.rooms) {
+        // Add a unique ID to each room
+        return parsedJson.rooms.map((room: Omit<Room, 'id'>) => ({
+            ...room,
+            id: `room-${Date.now()}-${Math.random()}`
+        }));
+    } else {
+        throw new Error('Invalid JSON structure received from AI.');
     }
-    return boq;
   } catch (error) {
     console.error("Error generating BOQ:", error);
-    // Try to parse Gemini's error for a more user-friendly message
-    if (error instanceof Error && (error.message.includes('JSON') || error.message.includes('parsing'))) {
-       throw new Error("The AI failed to generate a valid BOQ structure. Please try refining your request.");
+    if (error instanceof Error && error.message.includes('JSON')) {
+        throw new Error("The AI returned a response that was not valid JSON. Please try refining your request.");
     }
-    throw new Error("An unexpected error occurred while generating the BOQ. Please try again.");
+    throw new Error("Failed to generate Bill of Quantities. The AI model may be temporarily unavailable.");
   }
 };
 
-export const refineBoq = async (currentBoq: BoqItem[], refinementPrompt: string): Promise<BoqItem[]> => {
-    const prompt = `Given the following existing Bill of Quantities (BOQ) in JSON format:
-\`\`\`json
-${JSON.stringify(currentBoq, null, 2)}
-\`\`\`
+export const refineBoq = async (existingRooms: Room[], refinementPrompt: string): Promise<Room[]> => {
+    const prompt = `Given the existing Bill of Quantities (BOQ) below, please apply the following refinement: "${refinementPrompt}".
 
-Please apply the following refinement: "${refinementPrompt}"
+Existing BOQ:
+${JSON.stringify(existingRooms, null, 2)}
 
-Return the complete, updated BOQ as a single JSON array, adhering to the original schema. Do not include any text other than the JSON array itself.`;
-    
-    // Fix: Reuse the generateBoq function with the new combined prompt for refinement.
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-pro",
-        contents: prompt,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: boqSchema,
-            temperature: 0.2,
-            systemInstruction
+Please return the full, updated BOQ in the exact same JSON format as the input. Only modify the items as requested in the refinement prompt. For example, if asked to change a brand, find the relevant items and update their 'brand', 'modelNumber', 'itemName', and 'unitPrice' fields accordingly. If asked to add an item, append it to the correct room's 'boq' array.
+`;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: model,
+            contents: prompt,
+            config: {
+                systemInstruction: systemInstruction, // Reuse the same system instruction
+                responseMimeType: 'application/json',
+                responseSchema: responseSchema,
+                temperature: 0.1,
+            },
+        });
+
+        // Fix: Correctly extract text from response
+        const jsonText = response.text.trim();
+        const parsedJson = JSON.parse(jsonText);
+        
+        if (parsedJson && parsedJson.rooms) {
+             // Preserve original room IDs
+             return parsedJson.rooms.map((newRoom: Omit<Room, 'id'>, index: number) => ({
+                ...newRoom,
+                id: existingRooms[index]?.id || `room-${Date.now()}-${Math.random()}`
+            }));
+        } else {
+            throw new Error('Invalid JSON structure received from AI during refinement.');
         }
-    });
-
-    const jsonText = response.text.trim();
-    return JSON.parse(jsonText) as BoqItem[];
-}
+    } catch (error) {
+        console.error("Error refining BOQ:", error);
+        throw new Error("Failed to refine the Bill of Quantities.");
+    }
+};

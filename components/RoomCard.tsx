@@ -1,89 +1,105 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import type { Room } from '../types';
+import React from 'react';
+import type { Room, BoqItem, Currency } from '../types';
 
 interface RoomCardProps {
   room: Room;
-  isActive: boolean;
-  onSelect: () => void;
-  onUpdate: (room: Room) => void;
-  onDelete: () => void;
+  onBoqChange: (roomId: string, updatedBoq: BoqItem[]) => void;
+  currency: Currency;
+  exchangeRate: number;
 }
 
-const RoomCard: React.FC<RoomCardProps> = ({ room, isActive, onSelect, onUpdate, onDelete }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [name, setName] = useState(room.name);
-  const inputRef = useRef<HTMLInputElement>(null);
+const RoomCard: React.FC<RoomCardProps> = ({ room, onBoqChange, currency, exchangeRate }) => {
 
-  useEffect(() => {
-    if (isEditing) {
-      inputRef.current?.focus();
-    }
-  }, [isEditing]);
-  
-  useEffect(() => {
-    setName(room.name);
-  }, [room.name]);
-
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setName(e.target.value);
-  };
-
-  const handleBlur = () => {
-    if (name.trim()) {
-        onUpdate({ ...room, name });
+  const handleItemChange = (index: number, field: keyof BoqItem, value: any) => {
+    const updatedBoq = [...room.boq];
+    const itemToUpdate = { ...updatedBoq[index] };
+    
+    // Ensure numeric fields are numbers
+    if (field === 'quantity' || field === 'unitPrice') {
+        const numValue = Number(value);
+        // If it's unit price, we need to convert it back to USD before saving
+        itemToUpdate[field] = field === 'unitPrice' ? numValue / exchangeRate : numValue;
     } else {
-        setName(room.name); // Revert if name is empty
+        itemToUpdate[field] = value;
     }
-    setIsEditing(false);
-  };
-  
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleBlur();
-    } else if (e.key === 'Escape') {
-      setName(room.name);
-      setIsEditing(false);
-    }
+
+    updatedBoq[index] = itemToUpdate;
+    onBoqChange(room.id, updatedBoq);
   };
 
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation(); // prevent onSelect from firing
-    if (window.confirm(`Are you sure you want to delete "${room.name}"?`)) {
-      onDelete();
-    }
+  const handleDeleteItem = (index: number) => {
+    const updatedBoq = room.boq.filter((_, i) => i !== index);
+    onBoqChange(room.id, updatedBoq);
   };
 
-  const baseClasses = "p-4 rounded-lg cursor-pointer transition-all duration-200 flex justify-between items-center w-full sm:w-auto sm:min-w-[200px]";
-  const activeClasses = "bg-blue-600/80 ring-2 ring-blue-400 shadow-lg";
-  const inactiveClasses = "bg-slate-800 hover:bg-slate-700/50 border border-slate-700";
+  const roomTotal = room.boq.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) * exchangeRate;
+
+  const currencyFormatter = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
   return (
-    <div onClick={onSelect} className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}>
-      <div className="flex-grow">
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={name}
-            onChange={handleNameChange}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full bg-slate-900 text-white rounded p-1"
-          />
-        ) : (
-          <p className="font-medium text-white" onDoubleClick={() => setIsEditing(true)}>
-            {room.name}
-          </p>
-        )}
-        <p className="text-xs text-slate-400">{room.boq.length} items generated</p>
+    <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
+      <div className="p-4 bg-slate-800 border-b border-slate-700 flex justify-between items-center">
+        <h3 className="text-xl font-bold text-white">{room.name}</h3>
+        <div className="text-lg font-semibold text-blue-400">
+            Total: {currencyFormatter.format(roomTotal)}
+        </div>
       </div>
-      <button onClick={handleDelete} className="ml-4 text-slate-400 hover:text-red-500 transition-colors p-1 rounded-full flex-shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
-        </svg>
-      </button>
+      <div className="p-4">
+        <p className="text-sm text-slate-400 mb-4">
+          <span className="font-semibold text-slate-300">Requirements Summary: </span>
+          {room.requirements}
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left text-slate-300">
+            <thead className="text-xs text-slate-400 uppercase bg-slate-700/50">
+              <tr>
+                <th scope="col" className="px-4 py-3">Category</th>
+                <th scope="col" className="px-4 py-3">Item Name</th>
+                <th scope="col" className="px-4 py-3">Brand & Model</th>
+                <th scope="col" className="px-4 py-3 text-center">Qty</th>
+                <th scope="col" className="px-4 py-3 text-right">Unit Price</th>
+                <th scope="col" className="px-4 py-3 text-right">Total Price</th>
+                <th scope="col" className="px-4 py-3 text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {room.boq.map((item, index) => {
+                  const unitPriceConverted = item.unitPrice * exchangeRate;
+                  const totalPrice = item.quantity * unitPriceConverted;
+                  return (
+                    <tr key={`${room.id}-${index}`} className="border-b border-slate-700 hover:bg-slate-800">
+                      <td className="px-4 py-2">{item.category}</td>
+                      <td className="px-4 py-2 font-medium text-white">{item.itemName}</td>
+                      <td className="px-4 py-2">{item.brand} {item.modelNumber}</td>
+                      <td className="px-4 py-2 text-center">
+                        <input 
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                            className="w-16 bg-slate-900 border border-slate-600 rounded text-center py-1"
+                        />
+                      </td>
+                      <td className="px-4 py-2 text-right">{currencyFormatter.format(unitPriceConverted)}</td>
+                      <td className="px-4 py-2 text-right font-semibold">{currencyFormatter.format(totalPrice)}</td>
+                      <td className="px-4 py-2 text-center">
+                        <button onClick={() => handleDeleteItem(index)} className="text-red-500 hover:text-red-400 font-medium">
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

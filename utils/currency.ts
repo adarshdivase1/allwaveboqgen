@@ -1,33 +1,45 @@
 
-import { CURRENCIES, Currency } from '../types';
+import { Currency } from '../types';
 
-export const formatCurrency = (amount: number, currency: Currency): string => {
-  const currencyInfo = CURRENCIES.find(c => c.value === currency);
-  
-  // Fallback for environments that may not fully support Intl with all currencies
-  if (!currencyInfo) {
-    return `$${amount.toFixed(2)}`;
+// Using a free, no-API-key-required service for exchange rates.
+const API_URL = 'https://api.frankfurter.app/latest?from=USD&to=USD,EUR,GBP,INR';
+
+interface ExchangeRates {
+  [key: string]: number;
+}
+
+let cachedRates: { rates: ExchangeRates, timestamp: number } | null = null;
+const CACHE_DURATION = 1000 * 60 * 60; // 1 hour
+
+export const getExchangeRates = async (): Promise<Record<Currency, number>> => {
+  const now = Date.now();
+  if (cachedRates && (now - cachedRates.timestamp < CACHE_DURATION)) {
+    return cachedRates.rates as Record<Currency, number>;
   }
-  
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency,
-    currencyDisplay: 'symbol',
-  }).format(amount);
-};
 
-// In a real application, you would fetch this from an API.
-// Using USD as the base currency (rate = 1).
-export const fetchExchangeRates = async (): Promise<Record<Currency, number>> => {
-    // Mock API call
-    await new Promise(resolve => setTimeout(resolve, 500)); 
+  try {
+    const response = await fetch(API_URL);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch exchange rates: ${response.statusText}`);
+    }
+    const data = await response.json();
     
-    // Example rates relative to USD
-    const rates = {
-        USD: 1,
-        EUR: 0.93,
-        GBP: 0.79,
-        INR: 83.45,
+    const rates: ExchangeRates = data.rates;
+    
+    cachedRates = {
+        rates,
+        timestamp: now,
     };
-    return rates;
+
+    return rates as Record<Currency, number>;
+  } catch (error) {
+    console.error("Could not fetch exchange rates:", error);
+    // Return default/fallback rates on failure
+    return {
+      'USD': 1,
+      'EUR': 0.93,
+      'GBP': 0.79,
+      'INR': 83.5,
+    };
+  }
 };
