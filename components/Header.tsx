@@ -1,10 +1,7 @@
+
 import React from 'react';
 
-interface HeaderProps {
-    onClearProject: () => void;
-}
-
-const Header: React.FC<HeaderProps> = ({ onClearProject }) => {
+const Header: React.FC = () => {
   return (
     <header className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-40 border-b border-slate-700">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -17,12 +14,7 @@ const Header: React.FC<HeaderProps> = ({ onClearProject }) => {
               AI-Powered AV Bill of Quantities Generator
             </p>
           </div>
-          <button
-            onClick={onClearProject}
-            className="px-3 py-1.5 text-xs font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-red-500"
-          >
-            Clear Project
-          </button>
+          {/* Future placeholder for other nav items if needed */}
         </div>
       </div>
     </header>

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import RequirementInput from './components/RequirementInput';
 import BoqDisplay from './components/BoqDisplay';
@@ -14,32 +15,9 @@ import CurrencySelector from './components/CurrencySelector';
 
 type InputMode = 'text' | 'questionnaire';
 
-const SAVED_STATE_KEY = 'genBoqProjectState';
-
-const getInitialState = () => {
-    try {
-        const savedState = localStorage.getItem(SAVED_STATE_KEY);
-        if (savedState) {
-            const parsed = JSON.parse(savedState);
-            // Ensure date is still a valid format, just in case
-            if (parsed.clientDetails && !parsed.clientDetails.date) {
-                parsed.clientDetails.date = new Date().toISOString().split('T')[0];
-            }
-            return {
-                rooms: parsed.rooms || [],
-                clientDetails: parsed.clientDetails || getInitialClientDetails(),
-            };
-        }
-    } catch (error) {
-        console.error("Could not load saved state from localStorage", error);
-    }
-    return {
-        rooms: [],
-        clientDetails: getInitialClientDetails(),
-    };
-};
-
-const getInitialClientDetails = (): ClientDetailsType => ({
+function App() {
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [clientDetails, setClientDetails] = useState<ClientDetailsType>({
     projectName: '',
     clientName: '',
     preparedBy: 'GenBOQ AI Assistant',
@@ -49,14 +27,7 @@ const getInitialClientDetails = (): ClientDetailsType => ({
     keyClientPersonnel: '',
     location: '',
     keyComments: '',
-});
-
-
-function App() {
-  const [initialState] = useState(getInitialState);
-  const [rooms, setRooms] = useState<Room[]>(initialState.rooms);
-  const [clientDetails, setClientDetails] = useState<ClientDetailsType>(initialState.clientDetails);
-  
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputMode, setInputMode] = useState<InputMode>('text');
@@ -65,15 +36,7 @@ function App() {
   const [exchangeRates, setExchangeRates] = useState<Record<Currency, number>>({ USD: 1, EUR: 1, GBP: 1, INR: 1 });
   const [exchangeRate, setExchangeRate] = useState(1);
   
-  useEffect(() => {
-    try {
-      const stateToSave = { rooms, clientDetails };
-      localStorage.setItem(SAVED_STATE_KEY, JSON.stringify(stateToSave));
-    } catch (error) {
-      console.error("Could not save state to localStorage", error);
-    }
-  }, [rooms, clientDetails]);
-
+  // Fetch exchange rates on component mount
   useEffect(() => {
     const fetchRates = async () => {
         const rates = await getExchangeRates();
@@ -82,6 +45,7 @@ function App() {
     fetchRates();
   }, []);
 
+  // Update exchange rate when currency changes
   useEffect(() => {
       setExchangeRate(exchangeRates[selectedCurrency] || 1);
   }, [selectedCurrency, exchangeRates]);
@@ -116,16 +80,8 @@ function App() {
     }
   }
   
-  const handleClearProject = useCallback(() => {
-    if (window.confirm("Are you sure you want to clear the entire project? This action cannot be undone.")) {
-        localStorage.removeItem(SAVED_STATE_KEY);
-        setRooms([]);
-        setClientDetails(getInitialClientDetails());
-        setError(null);
-    }
-  }, []);
-
   const handleQuestionnaireAnswer = (questionId: string, value: string) => {
+    // This could be used to pre-fill client details in the future
     if (questionId === 'clientName') {
       setClientDetails(prev => ({...prev, clientName: value}));
     }
@@ -134,7 +90,7 @@ function App() {
   return (
     <AuthGate>
       <div className="bg-slate-900 text-slate-200 min-h-screen font-sans">
-        <Header onClearProject={handleClearProject}/>
+        <Header />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="space-y-8">
             <ClientDetails 
@@ -180,7 +136,7 @@ function App() {
               )}
             </div>
 
-            {(rooms.length > 0 || isLoading) && (
+            {rooms.length > 0 && (
               <BoqDisplay
                 rooms={rooms}
                 clientDetails={clientDetails}
