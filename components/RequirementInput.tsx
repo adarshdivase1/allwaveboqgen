@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import SparklesIcon from './icons/SparklesIcon';
 import LoaderIcon from './icons/LoaderIcon';
@@ -29,7 +28,7 @@ const RequirementInput: React.FC<RequirementInputProps> = ({ onSubmit, isLoading
           rows={10}
           value={requirements}
           onChange={(e) => setRequirements(e.target.value)}
-          className="w-full p-2 bg-slate-900 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
+          className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
           placeholder="e.g., A medium-sized boardroom for 12 people. Needs a large 4K display, wireless presentation capabilities, and ceiling microphones for video conferencing with a Crestron control system."
           disabled={isLoading}
         />

@@ -70,7 +70,7 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questionnaire, onSubmit, 
                 <input
                   type="text"
                   onChange={e => handleAnswerChange(q.id, e.target.value)}
-                  className="w-full p-2 bg-slate-900 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
                   disabled={isLoading}
                 />
               )}
@@ -78,14 +78,14 @@ const Questionnaire: React.FC<QuestionnaireProps> = ({ questionnaire, onSubmit, 
                 <input
                   type="number"
                   onChange={e => handleAnswerChange(q.id, e.target.value)}
-                  className="w-full p-2 bg-slate-900 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200 placeholder-slate-500"
                   disabled={isLoading}
                 />
               )}
               {q.type === 'select' && q.options && (
                 <select
                   onChange={e => handleAnswerChange(q.id, e.target.value)}
-                  className="w-full p-2 bg-slate-900 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200"
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-slate-200"
                   disabled={isLoading}
                   defaultValue=""
                 >

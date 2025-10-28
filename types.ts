@@ -1,12 +1,13 @@
-
 export interface BoqItem {
-  item_code: string;
+  category: string;
+  itemName: string;
+  brand: string;
+  modelNumber: string;
   description: string;
   quantity: number;
-  unit_price: number;
-  total_price: number;
-  category: string;
-  notes?: string;
+  unitPrice: number; // Stored in USD from AI
+  imageUrl: string;
+  notes: string;
 }
 
 export interface Room {
@@ -38,6 +39,12 @@ export interface ClientDetails {
   clientName: string;
   preparedBy: string;
   date: string;
+  designEngineer: string;
+  accountManager: string;
+  keyClientPersonnel: string;
+  location: string;
+  keyComments: string;
+  budget?: number;
 }
 
 export type Currency = 'USD' | 'EUR' | 'GBP' | 'INR';

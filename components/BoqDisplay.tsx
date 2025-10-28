@@ -1,106 +1,175 @@
 
-import React, { useState, useEffect } from 'react';
-import type { BoqItem, Room, ClientDetails, Currency } from '../types';
-import { formatCurrency, fetchExchangeRates } from '../utils/currency';
-import { exportToXlsx } from '../utils/exportToXlsx';
-import CurrencySelector from './CurrencySelector';
-import DownloadIcon from './icons/DownloadIcon';
+import React, { useState, useMemo } from 'react';
+import type { BoqItem, Room, Currency } from '../types';
+import { formatCurrency } from '../utils/currency';
 import ImageIcon from './icons/ImageIcon';
+import WandIcon from './icons/WandIcon';
+import DownloadIcon from './icons/DownloadIcon';
 
 interface BoqDisplayProps {
-  activeRoom: Room | null;
-  clientDetails: ClientDetails;
+  room: Room | undefined;
+  onUpdateBoq: (updatedBoq: BoqItem[]) => void;
+  onRefine: () => void;
+  onExport: () => void;
+  currency: Currency;
+  exchangeRate: number;
+  isLoading: boolean;
 }
 
-const BoqDisplay: React.FC<BoqDisplayProps> = ({ activeRoom, clientDetails }) => {
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('USD');
-  const [exchangeRates, setExchangeRates] = useState<Record<Currency, number> | null>(null);
+const BoqDisplay: React.FC<BoqDisplayProps> = ({ room, onUpdateBoq, onRefine, onExport, currency, exchangeRate, isLoading }) => {
+  const [editingCell, setEditingCell] = useState<{ rowIndex: number; colId: keyof BoqItem | null } | null>(null);
 
-  useEffect(() => {
-    const getRates = async () => {
-      const rates = await fetchExchangeRates();
-      setExchangeRates(rates);
+  const handleCellChange = (rowIndex: number, colId: keyof BoqItem, value: string | number) => {
+    if (!room) return;
+    const updatedBoq = room.boq.map((item, index) => {
+      if (index === rowIndex) {
+        // Convert back to number if the field is numeric
+        const finalValue = (colId === 'quantity' || colId === 'unitPrice') ? Number(value) : value;
+        return { ...item, [colId]: finalValue };
+      }
+      return item;
+    });
+    onUpdateBoq(updatedBoq);
+  };
+  
+  const handleItemDelete = (rowIndex: number) => {
+    if (!room || !window.confirm("Are you sure you want to delete this item?")) return;
+    const updatedBoq = room.boq.filter((_, index) => index !== rowIndex);
+    onUpdateBoq(updatedBoq);
+  };
+  
+  const handleAddItem = () => {
+    if (!room) return;
+    const newItem: BoqItem = {
+      category: 'New Category',
+      itemName: 'New Item',
+      brand: '',
+      modelNumber: '',
+      description: '',
+      quantity: 1,
+      unitPrice: 0,
+      imageUrl: '',
+      notes: '',
     };
-    getRates();
-  }, []);
+    onUpdateBoq([...room.boq, newItem]);
+  }
 
-  if (!activeRoom || !activeRoom.boq.length) {
+  const grandTotal = useMemo(() => {
+    if (!room) return 0;
+    return room.boq.reduce((sum, item) => sum + (item.quantity * item.unitPrice * exchangeRate), 0);
+  }, [room, exchangeRate]);
+  
+  if (!room) {
     return (
-      <div className="text-center py-20 bg-slate-800/50 rounded-lg border-2 border-dashed border-slate-700">
-        <ImageIcon />
-        <h3 className="mt-2 text-lg font-medium text-white">No Bill of Quantities Generated</h3>
-        <p className="mt-1 text-sm text-slate-400">Complete the requirements for a room to generate a BOQ.</p>
+      <div className="flex items-center justify-center h-full bg-slate-800/50 p-6 rounded-lg border border-dashed border-slate-700 text-slate-400">
+        <p>Select a room to view its Bill of Quantities, or generate a new one.</p>
       </div>
     );
   }
 
-  const exchangeRate = exchangeRates ? exchangeRates[selectedCurrency] : 1;
-  const total = activeRoom.boq.reduce((sum, item) => sum + item.total_price, 0);
-  const convertedTotal = total * exchangeRate;
+  const renderCell = (item: BoqItem, rowIndex: number, colId: keyof BoqItem) => {
+    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.colId === colId;
+    const value = item[colId];
 
-  const handleExport = () => {
-    if (activeRoom && clientDetails.projectName) {
-      exportToXlsx(activeRoom, clientDetails, selectedCurrency, exchangeRate);
-    } else {
-      alert("Please provide a Project Name before exporting.");
+    if (isEditing) {
+      return (
+        <input
+          type={typeof value === 'number' ? 'number' : 'text'}
+          value={String(value)}
+          onChange={(e) => handleCellChange(rowIndex, colId, e.target.value)}
+          onBlur={() => setEditingCell(null)}
+          autoFocus
+          className="w-full bg-slate-900 text-white rounded p-1 border border-blue-500"
+        />
+      );
     }
+    
+    if (colId === 'unitPrice') {
+        return formatCurrency(Number(value) * exchangeRate, currency);
+    }
+
+    return (
+      <span onDoubleClick={() => setEditingCell({ rowIndex, colId })} className="block w-full h-full p-2">
+        {String(value)}
+      </span>
+    );
   };
 
+  const tableHeaders: { id: keyof BoqItem; label: string; }[] = [
+    { id: 'category', label: 'Category' },
+    { id: 'brand', label: 'Brand' },
+    { id: 'modelNumber', label: 'Model' },
+    { id: 'itemName', label: 'Item Name' },
+    { id: 'description', label: 'Description' },
+    { id: 'quantity', label: 'Qty' },
+    { id: 'unitPrice', label: `Unit Price` },
+    { id: 'notes', label: 'Notes' },
+  ];
+
   return (
-    <div className="bg-slate-800/50 p-4 sm:p-6 rounded-lg border border-slate-700">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-        <h2 className="text-xl font-semibold text-white">
-          Bill of Quantities for: <span className="text-blue-400">{activeRoom.name}</span>
-        </h2>
-        <div className="flex items-center gap-4">
-          <CurrencySelector
-            selectedCurrency={selectedCurrency}
-            onCurrencyChange={setSelectedCurrency}
-            disabled={!exchangeRates}
-          />
-          <button
-            onClick={handleExport}
-            disabled={!clientDetails.projectName}
-            className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-green-500 disabled:bg-slate-500 disabled:cursor-not-allowed transition-colors"
-            title={!clientDetails.projectName ? "Enter a Project Name to enable export" : "Export to XLSX"}
-          >
-            <DownloadIcon />
-            Export
+    <div className="bg-slate-800/50 p-2 sm:p-4 rounded-lg border border-slate-700 h-full flex flex-col">
+       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 px-2">
+        <h2 className="text-2xl font-bold text-white mb-2 sm:mb-0">BOQ for: <span className="text-blue-400">{room.name}</span></h2>
+        <div className="flex items-center space-x-2">
+          <button onClick={onRefine} disabled={isLoading} className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-500">
+            <WandIcon /> Refine with AI
+          </button>
+          <button onClick={onExport} disabled={isLoading || room.boq.length === 0} className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-slate-500">
+            <DownloadIcon /> Export
           </button>
         </div>
       </div>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-700">
-          <thead className="bg-slate-900/50">
+      <div className="flex-grow overflow-auto">
+        <table className="min-w-full divide-y divide-slate-700 text-sm">
+          <thead className="bg-slate-900/70 sticky top-0">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Category</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Item Code</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">Description</th>
-              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-slate-300 uppercase tracking-wider">Qty</th>
-              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">Unit Price</th>
-              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-300 uppercase tracking-wider">Total Price</th>
+              {tableHeaders.map(header => (
+                <th key={header.id} scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                  {header.label}
+                </th>
+              ))}
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                Total
+              </th>
+               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="bg-slate-800 divide-y divide-slate-700">
-            {activeRoom.boq.map((item, index) => (
-              <tr key={index}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{item.category}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-slate-400">{item.item_code}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{item.description}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-200">{item.quantity}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-slate-200">{formatCurrency(item.unit_price * exchangeRate, selectedCurrency)}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-white">{formatCurrency(item.total_price * exchangeRate, selectedCurrency)}</td>
+            {room.boq.map((item, rowIndex) => (
+              <tr key={rowIndex} className="hover:bg-slate-700/50">
+                {tableHeaders.map(header => (
+                  <td key={header.id} className="px-1 py-1 whitespace-normal text-slate-300 align-top">
+                    {renderCell(item, rowIndex, header.id)}
+                  </td>
+                ))}
+                <td className="px-3 py-2 whitespace-nowrap text-slate-300 align-top">
+                    {formatCurrency(item.quantity * item.unitPrice * exchangeRate, currency)}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap text-slate-400 align-top text-center">
+                    {item.imageUrl && (
+                        <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="inline-block p-1 hover:text-blue-400" title="View reference image">
+                            <ImageIcon />
+                        </a>
+                    )}
+                    <button onClick={() => handleItemDelete(rowIndex)} className="inline-block p-1 hover:text-red-500" title="Delete item">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
+                    </button>
+                </td>
               </tr>
             ))}
           </tbody>
-          <tfoot className="bg-slate-900/50">
-            <tr>
-              <td colSpan={5} className="px-6 py-3 text-right text-md font-bold text-white uppercase">Grand Total</td>
-              <td className="px-6 py-3 text-right text-md font-bold text-white">{formatCurrency(convertedTotal, selectedCurrency)}</td>
-            </tr>
-          </tfoot>
         </table>
+      </div>
+      <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-700 px-2">
+         <button onClick={handleAddItem} disabled={isLoading} className="px-4 py-2 text-sm font-medium rounded-md text-white bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700">
+            Add Item
+          </button>
+          <div className="text-right">
+            <p className="text-slate-400 text-sm">Grand Total</p>
+            <p className="text-2xl font-bold text-white">{formatCurrency(grandTotal, currency)}</p>
+          </div>
       </div>
     </div>
   );

@@ -1,96 +1,98 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import type { BoqItem } from "../types";
+import type { BoqItem } from '../types';
 
-// FIX: Initialize GoogleGenAI with apiKey from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+// This check is for the developer to ensure they have set up their environment correctly.
+if (!process.env.API_KEY) {
+  throw new Error("API_KEY environment variable is not set");
+}
+// Fix: Initialize the GoogleGenAI client with the API key from environment variables.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const boqItemSchema = {
   type: Type.OBJECT,
   properties: {
-    item_code: {
-      type: Type.STRING,
-      description: "A unique item code or model number, e.g., 'CRES-DM-NVX-350'."
-    },
-    description: {
-      type: Type.STRING,
-      description: "A detailed description of the item."
-    },
-    quantity: {
-      type: Type.INTEGER,
-      description: "The number of units required."
-    },
-    unit_price: {
-      type: Type.NUMBER,
-      description: "Estimated price per unit in USD. Do not include currency symbols."
-    },
-    total_price: {
-        type: Type.NUMBER,
-        description: "The total price (quantity * unit_price). Do not include currency symbols."
-    },
-    category: {
-      type: Type.STRING,
-      description: "The category of the item, e.g., 'Display', 'Audio', 'Control', 'Cabling'."
-    },
-    notes: {
-        type: Type.STRING,
-        description: "Optional notes about the item, e.g., 'Requires specific firmware version'."
-    }
+    category: { type: Type.STRING, description: "The category of the item (e.g., Display, Audio, Control)." },
+    itemName: { type: Type.STRING, description: "The generic name of the item (e.g., 4K Professional Display)." },
+    brand: { type: Type.STRING, description: "The manufacturer or brand of the item (e.g., Samsung, Crestron)." },
+    modelNumber: { type: Type.STRING, description: "The specific model number of the item (e.g., LH75QMBEBGCX/ZA)." },
+    description: { type: Type.STRING, description: "A detailed description of the item and its purpose in the system." },
+    quantity: { type: Type.INTEGER, description: "The number of units required." },
+    unitPrice: { type: Type.NUMBER, description: "The estimated price per unit in USD. Do not include currency symbols." },
+    imageUrl: { type: Type.STRING, description: "A URL to a representative image of the product. Can be an empty string if not found." },
+    notes: { type: Type.STRING, description: "Any additional notes or considerations for this item. Can be an empty string." },
   },
-  required: ["item_code", "description", "quantity", "unit_price", "total_price", "category"]
+  required: ["category", "itemName", "brand", "modelNumber", "description", "quantity", "unitPrice"],
 };
 
-const responseSchema = {
-    type: Type.OBJECT,
-    properties: {
-        boq: {
-            type: Type.ARRAY,
-            description: "The list of Bill of Quantities items.",
-            items: boqItemSchema
-        }
-    },
-    required: ["boq"]
+const boqSchema = {
+  type: Type.ARRAY,
+  items: boqItemSchema,
 };
 
-const systemInstruction = `You are an expert AV (Audio-Visual) system designer. Your task is to generate a detailed Bill of Quantities (BOQ) based on user-provided requirements for a specific room.
-The BOQ must be in JSON format.
-Each item in the BOQ should include an item code/model number, a clear description, quantity, estimated unit price in USD, total price, and a category.
-Do not include any introductory text, just return the raw JSON object.
-Ensure prices are realistic market estimates.
-The categories should be logical, such as 'Display', 'Audio', 'Video Conferencing', 'Control System', 'Cabling & Connectivity', 'Infrastructure', etc.
-Calculate total_price accurately as quantity * unit_price.
-`;
+const systemInstruction = `You are an expert Audio/Visual (AV) system designer. Your task is to generate a detailed Bill of Quantities (BOQ) based on the user's room requirements.
+- The output MUST be a valid JSON array of objects, strictly adhering to the provided schema.
+- For each item, provide a well-known brand and a realistic model number.
+- Ensure quantities are appropriate for the specified room size and purpose.
+- Unit prices should be realistic, in USD, and represented as a number (e.g., 1500.00).
+- The description should explain why the item is chosen for this setup.
+- If a budget is provided, try to select components that fit within the budget, prioritizing core functionality.
+- Do not include any introductory text, closing remarks, or any content outside of the JSON array itself. The response must start with '[' and end with ']'.`;
 
 export const generateBoq = async (requirements: string): Promise<BoqItem[]> => {
   try {
-    // FIX: Use ai.models.generateContent for querying GenAI with model name and prompt.
+    // Fix: Call the Gemini API to generate content with the specified model, contents, and configuration.
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-pro", // Using a powerful model for this complex JSON generation task
-      contents: requirements,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        responseSchema: responseSchema,
-        temperature: 0.2, // Lower temperature for more deterministic and structured output
-      },
+        model: "gemini-2.5-pro", // Using a more capable model for complex structured output
+        contents: requirements,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: boqSchema,
+            temperature: 0.2, // Lower temperature for more predictable, structured output
+            systemInstruction
+        },
     });
 
-    // FIX: Directly access response.text to get the generated content.
-    const jsonString = response.text;
-    const result = JSON.parse(jsonString);
-
-    if (result.boq && Array.isArray(result.boq)) {
-      return result.boq as BoqItem[];
-    } else {
-      console.error("Generated JSON is not in the expected format:", result);
-      throw new Error("Failed to generate a valid Bill of Quantities. The format was incorrect.");
+    // Fix: Extract and parse the JSON response from the API.
+    const jsonText = response.text.trim();
+    const boq = JSON.parse(jsonText) as BoqItem[];
+    // Basic validation
+    if (!Array.isArray(boq)) {
+      throw new Error("AI response is not a valid array.");
     }
+    return boq;
   } catch (error) {
-    console.error("Error generating BOQ from Gemini:", error);
-    // Add more specific error handling if possible
-    if (error instanceof Error) {
-        throw new Error(`An error occurred while communicating with the AI model: ${error.message}`);
+    console.error("Error generating BOQ:", error);
+    // Try to parse Gemini's error for a more user-friendly message
+    if (error instanceof Error && (error.message.includes('JSON') || error.message.includes('parsing'))) {
+       throw new Error("The AI failed to generate a valid BOQ structure. Please try refining your request.");
     }
-    throw new Error("An unknown error occurred while generating the BOQ.");
+    throw new Error("An unexpected error occurred while generating the BOQ. Please try again.");
   }
 };
+
+export const refineBoq = async (currentBoq: BoqItem[], refinementPrompt: string): Promise<BoqItem[]> => {
+    const prompt = `Given the following existing Bill of Quantities (BOQ) in JSON format:
+\`\`\`json
+${JSON.stringify(currentBoq, null, 2)}
+\`\`\`
+
+Please apply the following refinement: "${refinementPrompt}"
+
+Return the complete, updated BOQ as a single JSON array, adhering to the original schema. Do not include any text other than the JSON array itself.`;
+    
+    // Fix: Reuse the generateBoq function with the new combined prompt for refinement.
+    const response = await ai.models.generateContent({
+        model: "gemini-2.5-pro",
+        contents: prompt,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: boqSchema,
+            temperature: 0.2,
+            systemInstruction
+        }
+    });
+
+    const jsonText = response.text.trim();
+    return JSON.parse(jsonText) as BoqItem[];
+}
